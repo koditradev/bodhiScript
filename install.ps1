@@ -198,21 +198,32 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$ScriptsDirectoryOutput = & $PYTHON -c "import sysconfig; print(sysconfig.get_path('scripts'))"
+$PythonPaths = @(& $PYTHON -c "import site, sysconfig; print(sysconfig.get_path('scripts')); print(site.getuserbase())")
 
-if ($LASTEXITCODE -ne 0 -or -not $ScriptsDirectoryOutput) {
-    Write-Host "Could not determine the Python Scripts directory."
+if ($LASTEXITCODE -ne 0 -or $PythonPaths.Count -lt 2) {
+    Write-Host "Could not determine the Python Scripts directories."
     exit 1
 }
 
-$ScriptsDirectory = "$ScriptsDirectoryOutput".Trim()
+$ScriptsDirectories = @(
+    "$($PythonPaths[0])".Trim()
+    (Join-Path "$($PythonPaths[1])".Trim() "Scripts")
+) | Select-Object -Unique
 
-if (-not (Test-Path $ScriptsDirectory)) {
-    Write-Host "Python Scripts directory not found: $ScriptsDirectory"
-    exit 1
+foreach ($ScriptsDirectory in $ScriptsDirectories) {
+    if (-not (Test-Path $ScriptsDirectory)) {
+        continue
+    }
+
+    $env:Path = "$ScriptsDirectory;$env:Path"
 }
 
-$env:Path = "$ScriptsDirectory;$env:Path"
+$ExistingScriptsDirectories = @($ScriptsDirectories | Where-Object { Test-Path $_ })
+
+if ($ExistingScriptsDirectories.Count -eq 0) {
+    Write-Host "Python Scripts directories not found: $($ScriptsDirectories -join ', ')"
+    exit 1
+}
 
 $BODHI = $null
 $launcherNames = @(
@@ -223,23 +234,30 @@ $launcherNames = @(
     "bodhi-script-script.py"
 )
 
-foreach ($name in $launcherNames) {
-    $candidate = Join-Path $ScriptsDirectory $name
-    if (Test-Path $candidate) {
-        $BODHI = $candidate
+foreach ($ScriptsDirectory in $ExistingScriptsDirectories) {
+    foreach ($name in $launcherNames) {
+        $candidate = Join-Path $ScriptsDirectory $name
+        if (Test-Path $candidate) {
+            $BODHI = $candidate
+            break
+        }
+    }
+
+    if (-not $BODHI) {
+        $matchingLaunchers = Get-ChildItem -Path $ScriptsDirectory -Filter "bodhi*.exe" -ErrorAction SilentlyContinue
+        if ($matchingLaunchers) {
+            $BODHI = $matchingLaunchers[0].FullName
+        }
+    }
+
+    if ($BODHI) {
         break
     }
 }
 
 if (-not $BODHI) {
-    $matchingLaunchers = Get-ChildItem -Path $ScriptsDirectory -Filter "bodhi*.exe" -ErrorAction SilentlyContinue
-    if ($matchingLaunchers) {
-        $BODHI = $matchingLaunchers[0].FullName
-    }
-}
-
-if (-not $BODHI) {
     Write-Host "bodhi launcher was not created."
+    Write-Host "Checked Python Scripts directories: $($ExistingScriptsDirectories -join ', ')"
     Write-Host "Please check the Python install and try again."
     exit 1
 }
