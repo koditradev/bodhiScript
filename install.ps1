@@ -198,17 +198,14 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$PythonPaths = @(& $PYTHON -c "import site, sysconfig; print(sysconfig.get_path('scripts')); print(site.getuserbase())")
+$ScriptsDirectories = @(& $PYTHON -c "import sysconfig; print(sysconfig.get_path('scripts')); print(sysconfig.get_path('scripts', scheme='nt_user'))")
 
-if ($LASTEXITCODE -ne 0 -or $PythonPaths.Count -lt 2) {
+if ($LASTEXITCODE -ne 0 -or $ScriptsDirectories.Count -lt 2) {
     Write-Host "Could not determine the Python Scripts directories."
     exit 1
 }
 
-$ScriptsDirectories = @(
-    "$($PythonPaths[0])".Trim()
-    (Join-Path "$($PythonPaths[1])".Trim() "Scripts")
-) | Select-Object -Unique
+$ScriptsDirectories = @($ScriptsDirectories | ForEach-Object { "$_".Trim() } | Select-Object -Unique)
 
 foreach ($ScriptsDirectory in $ScriptsDirectories) {
     if (-not (Test-Path $ScriptsDirectory)) {
