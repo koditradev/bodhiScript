@@ -31,14 +31,14 @@ function Find-Git {
 function Find-Python {
     $candidates = @()
 
-    $pyCmd = Get-Command py -ErrorAction SilentlyContinue
-    if ($pyCmd) {
-        $candidates += $pyCmd.Source
-    }
-
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
     if ($pythonCmd) {
         $candidates += $pythonCmd.Source
+    }
+
+    $pyCmd = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyCmd) {
+        $candidates += $pyCmd.Source
     }
 
     $searchRoots = @(
@@ -198,11 +198,17 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$PythonDirectory = Split-Path $PYTHON
-$ScriptsDirectory = Join-Path $PythonDirectory "Scripts"
+$ScriptsDirectoryOutput = & $PYTHON -c "import sysconfig; print(sysconfig.get_path('scripts'))"
+
+if ($LASTEXITCODE -ne 0 -or -not $ScriptsDirectoryOutput) {
+    Write-Host "Could not determine the Python Scripts directory."
+    exit 1
+}
+
+$ScriptsDirectory = "$ScriptsDirectoryOutput".Trim()
 
 if (-not (Test-Path $ScriptsDirectory)) {
-    Write-Host "Python Scripts directory not found."
+    Write-Host "Python Scripts directory not found: $ScriptsDirectory"
     exit 1
 }
 
